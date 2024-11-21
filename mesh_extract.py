@@ -79,33 +79,33 @@ def extract_mesh(dataset, pipe, checkpoint_iterations=None):
                                             device=o3d_device)
     for color, depth, viewpoint_cam in zip(color_list, depth_list, viewpoint_cam_list):
         depth = o3d.t.geometry.Image(depth)
-        # depth = depth.to(o3d_device)
+        depth = depth.to(o3d_device)
         color = o3d.t.geometry.Image(color)
-        # color = color.to(o3d_device)
+        color = color.to(o3d_device)
         W, H = viewpoint_cam.image_width, viewpoint_cam.image_height
         fx = W / (2 * math.tan(viewpoint_cam.FoVx / 2.))
         fy = H / (2 * math.tan(viewpoint_cam.FoVy / 2.))
         intrinsic = np.array([[fx,0,float(W)/2],[0,fy,float(H)/2],[0,0,1]],dtype=np.float64)
         intrinsic = o3d.core.Tensor(intrinsic)
         extrinsic = o3d.core.Tensor((viewpoint_cam.world_view_transform.T).cpu().numpy().astype(np.float64))
-    #     frustum_block_coords = vbg.compute_unique_block_coordinates(
-    #                                                                     depth, 
-    #                                                                     intrinsic,
-    #                                                                     extrinsic, 
-    #                                                                     1.0, 8.0
-    #                                                                 )
-    #     vbg.integrate(
-    #                     frustum_block_coords, 
-    #                     depth, 
-    #                     color,
-    #                     intrinsic,
-    #                     extrinsic,  
-    #                     1.0, 8.0
-    #                 )
+        frustum_block_coords = vbg.compute_unique_block_coordinates(
+                                                                        depth, 
+                                                                        intrinsic,
+                                                                        extrinsic, 
+                                                                        1.0, 8.0
+                                                                    )
+        vbg.integrate(
+                        frustum_block_coords, 
+                        depth, 
+                        color,
+                        intrinsic,
+                        extrinsic,  
+                        1.0, 8.0
+                    )
 
-    # mesh = vbg.extract_triangle_mesh()
-    # mesh.compute_vertex_normals()
-    # o3d.io.write_triangle_mesh(os.path.join(dataset.model_path,"recon.ply"),mesh.to_legacy())
+    mesh = vbg.extract_triangle_mesh()
+    mesh.compute_vertex_normals()
+    o3d.io.write_triangle_mesh(os.path.join(dataset.model_path,"recon.ply"),mesh.to_legacy())
     print("done!")
 
 if __name__ == "__main__":
