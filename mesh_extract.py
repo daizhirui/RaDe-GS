@@ -15,7 +15,7 @@ import open3d.core as o3c
 from scene.dataset_readers import sceneLoadTypeCallbacks
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
 import json
-
+from tqdm import tqdm
 
 def load_camera(args):
     if os.path.exists(os.path.join(args.source_path, "sparse")):
@@ -23,6 +23,9 @@ def load_camera(args):
     elif os.path.exists(os.path.join(args.source_path, "transforms_train.json")):
         print("Found transforms_train.json file, assuming Blender data set!")
         scene_info = sceneLoadTypeCallbacks["Blender"](args.source_path, args.white_background, args.eval)
+    elif os.path.exists(os.path.join(args.source_path, "sddf_dataset.pt")):
+        scene_info = sceneLoadTypeCallbacks["SDDF"](args.source_path)
+
     return cameraList_from_camInfos(scene_info.train_cameras, 1.0, args)
 
 
@@ -51,7 +54,7 @@ def extract_mesh(dataset, pipe, checkpoint_iterations=None):
     depth_list = []
     color_list = []
     alpha_thres = 0.5
-    for viewpoint_cam in viewpoint_cam_list:
+    for viewpoint_cam in tqdm(viewpoint_cam_list):
         # Rendering offscreen from that camera 
         render_pkg = render(viewpoint_cam, gaussians, pipe, background, kernel_size)
         rendered_img = torch.clamp(render_pkg["render"], min=0, max=1.0).cpu().numpy().transpose(1,2,0)
@@ -76,33 +79,33 @@ def extract_mesh(dataset, pipe, checkpoint_iterations=None):
                                             device=o3d_device)
     for color, depth, viewpoint_cam in zip(color_list, depth_list, viewpoint_cam_list):
         depth = o3d.t.geometry.Image(depth)
-        depth = depth.to(o3d_device)
+        # depth = depth.to(o3d_device)
         color = o3d.t.geometry.Image(color)
-        color = color.to(o3d_device)
+        # color = color.to(o3d_device)
         W, H = viewpoint_cam.image_width, viewpoint_cam.image_height
         fx = W / (2 * math.tan(viewpoint_cam.FoVx / 2.))
         fy = H / (2 * math.tan(viewpoint_cam.FoVy / 2.))
         intrinsic = np.array([[fx,0,float(W)/2],[0,fy,float(H)/2],[0,0,1]],dtype=np.float64)
         intrinsic = o3d.core.Tensor(intrinsic)
         extrinsic = o3d.core.Tensor((viewpoint_cam.world_view_transform.T).cpu().numpy().astype(np.float64))
-        frustum_block_coords = vbg.compute_unique_block_coordinates(
-                                                                        depth, 
-                                                                        intrinsic,
-                                                                        extrinsic, 
-                                                                        1.0, 8.0
-                                                                    )
-        vbg.integrate(
-                        frustum_block_coords, 
-                        depth, 
-                        color,
-                        intrinsic,
-                        extrinsic,  
-                        1.0, 8.0
-                    )
+    #     frustum_block_coords = vbg.compute_unique_block_coordinates(
+    #                                                                     depth, 
+    #                                                                     intrinsic,
+    #                                                                     extrinsic, 
+    #                                                                     1.0, 8.0
+    #                                                                 )
+    #     vbg.integrate(
+    #                     frustum_block_coords, 
+    #                     depth, 
+    #                     color,
+    #                     intrinsic,
+    #                     extrinsic,  
+    #                     1.0, 8.0
+    #                 )
 
-    mesh = vbg.extract_triangle_mesh()
-    mesh.compute_vertex_normals()
-    o3d.io.write_triangle_mesh(os.path.join(dataset.model_path,"recon.ply"),mesh.to_legacy())
+    # mesh = vbg.extract_triangle_mesh()
+    # mesh.compute_vertex_normals()
+    # o3d.io.write_triangle_mesh(os.path.join(dataset.model_path,"recon.ply"),mesh.to_legacy())
     print("done!")
 
 if __name__ == "__main__":

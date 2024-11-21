@@ -27,6 +27,8 @@ import cv2
 import trimesh
 import open3d as o3d
 import re
+import pickle
+import yaml
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -141,6 +143,7 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
             FovY = focal2fov(focal_length_y, height)
             FovX = focal2fov(focal_length_x, width)
         else:
+            print(f"The model type is: {intr.model}")
             assert False, "Colmap camera model not handled: only undistorted datasets (PINHOLE or SIMPLE_PINHOLE cameras) supported!"
 
         image_path = os.path.join(images_folder, os.path.basename(extr.name))
@@ -234,6 +237,7 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
             pcd = BasicPointCloud(points=pcd.vertices[point_id], colors=pcd.colors[point_id][:,:3].astype(np.float32)/255, normals=None)
         except:
             pcd = None
+    breakpoint()
 
     scene_info = SceneInfo(point_cloud=pcd,
                            train_cameras=train_cam_infos,
@@ -321,9 +325,105 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
                            point_cloud=pcd)
     return scene_info
 
+def readSDDFCamInfo(
+    path,
+    suffix='train',      
+):
+    base_path = os.path.join(path, suffix)
+    poses_pickle_file_path = os.path.join(base_path, 'poses.pkl')
+    with open(poses_pickle_file_path, 'rb') as f:
+        poses = pickle.load(f)
+    sensor_setting_file_path = os.path.join(base_path, 'sensor_setting.yaml')
+    with open(sensor_setting_file_path, 'r') as f:
+        sensor_setting = yaml.safe_load(f)
+
+    FovX = focal2fov(
+        sensor_setting["camera_fx"], 
+        sensor_setting["image_width"]
+    )
+    FovY = focal2fov(
+        sensor_setting["camera_fy"],
+        sensor_setting["image_height"]
+    )
+
+    cam_infos = []
+    rgb_image_path_base = os.path.join(base_path, 'rgb')
+
+    oTc = np.array([
+        [0, -1, 0],
+        [0, 0, -1],
+        [1, 0, 0]
+    ])
+
+    for idx, (R_wTc, T_wTc) in enumerate(poses):
+        image_name = f"{idx:06}.png"
+        image_file_path = os.path.join(
+            rgb_image_path_base,
+            image_name
+        )
+        image = Image.open(image_file_path)
+
+        R_oTw = oTc @ R_wTc.T # try R_oTw
+        T_oTw = oTc @ (-R_wTc.T @ T_wTc) # try T_oTw
+
+        cam_infos.append(
+            CameraInfo(
+                uid=idx,
+                R = R_oTw.T,
+                T = T_oTw,
+                FovX=FovX,
+                FovY=FovY,
+                image=image,
+                width = sensor_setting["image_width"],
+                height = sensor_setting["image_height"],
+                image_name = image_name,
+                image_path=image_file_path,
+                mask=None
+            )
+        )
+
+            # cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
+            #                 image_path=image_path, image_name=image_name, width=image.size[0], height=image.size[1], mask=None))
+            
+    return cam_infos
+
+def readSDDFDatasetInfo(
+        path
+    ):
+
+    ply_path = os.path.join(path, "points3d.ply")
+    # TODO: combine depth image pointclouds? 
+    if ply_path is None or not os.path.exists(ply_path):
+        num_pts = 100_000
+        print(f"Generating random point cloud ({num_pts})...")
+        
+        # We create random points inside the bounds of the synthetic Blender scenes
+        xyz = np.random.random((num_pts, 3)) * 2.6 - 1.3
+        shs = np.random.random((num_pts, 3)) / 255.0
+        pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
+
+        storePly(ply_path, xyz, SH2RGB(shs) * 255)
+
+    try:
+        pcd = fetchPly(ply_path)
+    except:
+        pcd = None
+
+    cam_base_path = os.path.join(path, 'scans')
+
+    train_cam_infos = readSDDFCamInfo(cam_base_path, 'train')
+    test_cam_infos = readSDDFCamInfo(cam_base_path, 'test')
+
+    scene_info = SceneInfo(train_cameras=train_cam_infos,
+                           test_cameras=test_cam_infos,
+                           nerf_normalization=getNerfppNorm(train_cam_infos),
+                           ply_path=ply_path,
+                           point_cloud=pcd)
+    return scene_info
 
 
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
-    "Blender" : readNerfSyntheticInfo
+    "Blender" : readNerfSyntheticInfo,
+    "SDDF": readSDDFDatasetInfo,
 }
