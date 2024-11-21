@@ -24,14 +24,19 @@ from gaussian_renderer import GaussianModel
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, kernel_size):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
+    render_depth_path = os.path.join(model_path, name, "ours_{}".format(iteration), "render_depth")
 
     makedirs(render_path, exist_ok=True)
+    makedirs(render_depth_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
-        rendering = render(view, gaussians, pipeline, background, kernel_size=kernel_size)["render"]
+        render_pkg = render(view, gaussians, pipeline, background, kernel_size=kernel_size)
+        rgb_img = render_pkg["render"]
+        depth_img = render_pkg["median_depth"]
         gt = view.original_image[0:3, :, :]
-        torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
+        torchvision.utils.save_image(depth_img, os.path.join(render_depth_path, '{0:05d}'.format(idx) + ".png"))
+        torchvision.utils.save_image(rgb_img, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
 
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool):
