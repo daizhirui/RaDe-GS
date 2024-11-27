@@ -349,6 +349,7 @@ def readSDDFCamInfo(
 
     cam_infos = []
     rgb_image_path_base = os.path.join(base_path, 'rgb')
+    depth_image_path_base = os.path.join(base_path, 'depth')
 
     oTc = np.array([
         [0, -1, 0],
@@ -364,6 +365,13 @@ def readSDDFCamInfo(
         )
         image = Image.open(image_file_path)
 
+        depth_image_file_path = os.path.join(
+            depth_image_path_base,
+            image_name
+        )
+
+        depth_image = Image.open(depth_image_file_path)
+
         R_oTw = oTc @ R_wTc.T # try R_oTw
         T_oTw = oTc @ (-R_wTc.T @ T_wTc) # try T_oTw
 
@@ -375,10 +383,12 @@ def readSDDFCamInfo(
                 FovX=FovX,
                 FovY=FovY,
                 image=image,
+                depth_image=depth_image,
                 width = sensor_setting["image_width"],
                 height = sensor_setting["image_height"],
                 image_name = image_name,
                 image_path=image_file_path,
+                depth_image_path=depth_image_path_base,
                 mask=None
             )
         )

@@ -130,14 +130,25 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                                                                     render_pkg["viewspace_points"], 
                                                                     render_pkg["visibility_filter"], 
                                                                     render_pkg["radii"])
-        gt_image = viewpoint_cam.original_image.cuda()
-
-        if dataset.use_decoupled_appearance:
-            Ll1_render = L1_loss_appearance(rendered_image, gt_image, gaussians, viewpoint_cam.uid)
-        else:
-            Ll1_render = l1_loss(rendered_image, gt_image)
-
         
+        if dataset.use_rgb:
+            gt_image = viewpoint_cam.original_image.cuda()
+
+            if dataset.use_decoupled_appearance:
+                Ll1_render = L1_loss_appearance(rendered_image, gt_image, gaussians, viewpoint_cam.uid)
+            else:
+                Ll1_render = l1_loss(rendered_image, gt_image)
+            rgb_loss = (1.0 - opt.lambda_dssim) * Ll1_render + opt.lambda_dssim * (1.0 - ssim(rendered_image, gt_image.unsqueeze(0)))
+        else:
+            Ll1_render = 0
+            rgb_loss = 0
+
+        if dataset.use_depth:
+            gt_depth_image = viewpoint_cam.depth_image.cuda()
+            Ll1_depth = l1_loss(render_pkg["median_depth"], gt_depth_image)
+        else:
+            Ll1_depth = 0
+
         if reg_kick_on:
             lambda_depth_normal = opt.lambda_depth_normal
             if require_depth:
@@ -157,9 +168,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             lambda_depth_normal = 0
             depth_normal_loss = torch.tensor([0],dtype=torch.float32,device="cuda")
             
-        rgb_loss = (1.0 - opt.lambda_dssim) * Ll1_render + opt.lambda_dssim * (1.0 - ssim(rendered_image, gt_image.unsqueeze(0)))
         
-        loss = rgb_loss + depth_normal_loss * lambda_depth_normal
+        loss = rgb_loss + depth_normal_loss * lambda_depth_normal + Ll1_depth
         loss.backward()
 
         iter_end.record()
