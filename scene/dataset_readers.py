@@ -42,6 +42,8 @@ class CameraInfo(NamedTuple):
     width: int
     height: int
     mask: np.array = None
+    depth_image: np.array = None
+    depth_image_path: str = None
 
 class SceneInfo(NamedTuple):
     point_cloud: BasicPointCloud
@@ -237,7 +239,6 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
             pcd = BasicPointCloud(points=pcd.vertices[point_id], colors=pcd.colors[point_id][:,:3].astype(np.float32)/255, normals=None)
         except:
             pcd = None
-    breakpoint()
 
     scene_info = SceneInfo(point_cloud=pcd,
                            train_cameras=train_cam_infos,
@@ -404,10 +405,7 @@ def readSDDFDatasetInfo(
 
         storePly(ply_path, xyz, SH2RGB(shs) * 255)
 
-    try:
-        pcd = fetchPly(ply_path)
-    except:
-        pcd = None
+    pcd = fetchPly(ply_path)
 
     cam_base_path = os.path.join(path, 'scans')
 
