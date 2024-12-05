@@ -20,22 +20,45 @@ from utils.general_utils import safe_state
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel
+import cv2
+import numpy as np
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, kernel_size):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
     render_depth_path = os.path.join(model_path, name, "ours_{}".format(iteration), "render_depth")
+    render_range_path = os.path.join(model_path, name, "ours_{}".format(iteration), "render_range")
+    render_normal_path = os.path.join(model_path, name, "ours_{}".format(iteration), "render_normal")
 
     makedirs(render_path, exist_ok=True)
     makedirs(render_depth_path, exist_ok=True)
+    makedirs(render_range_path, exist_ok=True)
+    makedirs(render_normal_path, exist_ok=True)
+
     makedirs(gts_path, exist_ok=True)
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         render_pkg = render(view, gaussians, pipeline, background, kernel_size=kernel_size)
         rgb_img = render_pkg["render"]
-        depth_img = render_pkg["median_depth"]
+        depth_img = render_pkg["median_depth"].detach().cpu().numpy()[0, ...]
+        depth_img = (1000 * depth_img).astype(np.uint16)        
+        depth_img_jet = cv2.applyColorMap(cv2.normalize(depth_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC1), cv2.COLORMAP_JET)
+
+        range_img = torch.linalg.norm(render_pkg["median_coord"], dim=0).detach().cpu().numpy()
+        range_img = (1000 * range_img).astype(np.uint16)
+        range_img_jet = cv2.applyColorMap(cv2.normalize(range_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC1), cv2.COLORMAP_JET)
+
+        normal_img = render_pkg["normal"].detach().cpu().numpy()
+
         gt = view.original_image[0:3, :, :]
-        torchvision.utils.save_image(depth_img, os.path.join(render_depth_path, '{0:05d}'.format(idx) + ".png"))
+        # save range
+        cv2.imwrite(os.path.join(render_range_path, '{0:05d}'.format(idx) + ".png"), range_img)
+        cv2.imwrite(os.path.join(render_range_path, 'jetmap_{0:05d}'.format(idx) + ".png"), range_img_jet)
+
+        # save depth
+        cv2.imwrite(os.path.join(render_depth_path, '{0:05d}'.format(idx) + ".png"), depth_img)
+        cv2.imwrite(os.path.join(render_depth_path, 'jetmap_{0:05d}'.format(idx) + ".png"), depth_img_jet)
+
         torchvision.utils.save_image(rgb_img, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
 

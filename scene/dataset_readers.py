@@ -162,8 +162,8 @@ def fetchPly(path):
     plydata = PlyData.read(path)
     vertices = plydata['vertex']
     positions = np.vstack([vertices['x'], vertices['y'], vertices['z']]).T
-    colors = np.vstack([vertices['red'], vertices['green'], vertices['blue']]).T / 255.0
     normals = np.vstack([vertices['nx'], vertices['ny'], vertices['nz']]).T
+    colors = np.vstack([vertices['red'], vertices['green'], vertices['blue']]).T / 255.0
     return BasicPointCloud(points=positions, colors=colors, normals=normals)
 
 def fetchOpen3DPly(path):
@@ -358,19 +358,19 @@ def readSDDFCamInfo(
     ])
 
     for idx, (R_wTc, T_wTc) in enumerate(poses):
-        image_name = f"{idx:06}.png"
+        image_name = f"{idx:06}"
         image_file_path = os.path.join(
             rgb_image_path_base,
-            image_name
+            image_name + ".png"
         )
         image = Image.open(image_file_path)
 
         depth_image_file_path = os.path.join(
             depth_image_path_base,
-            image_name
+            image_name + ".tiff"
         )
 
-        depth_image = Image.open(depth_image_file_path)
+        depth_image = cv2.imread(depth_image_file_path, cv2.IMREAD_UNCHANGED)
 
         R_oTw = oTc @ R_wTc.T # try R_oTw
         T_oTw = oTc @ (-R_wTc.T @ T_wTc) # try T_oTw

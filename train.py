@@ -123,7 +123,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         reg_kick_on = iteration >= opt.regularization_from_iter
         
-        render_pkg = render(viewpoint_cam, gaussians, pipe, background, kernel_size, require_coord = require_coord and reg_kick_on, require_depth = require_depth and reg_kick_on)
+        render_pkg = render(viewpoint_cam, gaussians, pipe, background, kernel_size, require_coord = False, require_depth = True)
         rendered_image: torch.Tensor
         rendered_image, viewspace_point_tensor, visibility_filter, radii = (
                                                                     render_pkg["render"], 
@@ -140,14 +140,20 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 Ll1_render = l1_loss(rendered_image, gt_image)
             rgb_loss = (1.0 - opt.lambda_dssim) * Ll1_render + opt.lambda_dssim * (1.0 - ssim(rendered_image, gt_image.unsqueeze(0)))
         else:
-            Ll1_render = 0
-            rgb_loss = 0
+            Ll1_render = torch.tensor([0],dtype=torch.float32,device="cuda")
+            rgb_loss = torch.tensor([0],dtype=torch.float32,device="cuda")
+
+
+        rendered_depth_image: torch.Tensor = render_pkg["median_depth"]
 
         if dataset.use_depth:
             gt_depth_image = viewpoint_cam.depth_image.cuda()
-            Ll1_depth = l1_loss(render_pkg["median_depth"], gt_depth_image)
+            Ll1_depth = l1_loss(rendered_depth_image, gt_depth_image)
         else:
-            Ll1_depth = 0
+            Ll1_depth = torch.tensor([0],dtype=torch.float32,device="cuda")
+
+        # print(f"GT: {gt_depth_image.min()}, {gt_depth_image.max()}")
+        # print(f"Render: {torch.min(rendered_depth_image)}, {torch.max(rendered_depth_image)}")
 
         if reg_kick_on:
             lambda_depth_normal = opt.lambda_depth_normal

@@ -14,6 +14,7 @@ import numpy as np
 from utils.general_utils import PILtoTorch
 from utils.graphics_utils import fov2focal
 import torch
+import cv2
 
 WARNED = False
 
@@ -55,7 +56,10 @@ def loadCam(args, id, cam_info, resolution_scale):
         loaded_mask = None
         gt_image = resized_image_rgb
 
-    resized_image_depth = PILtoTorch(cam_info.depth_image, resolution)
+
+    resized_image_depth_np = cv2.resize(cam_info.depth_image, resolution)
+    resized_image_depth = torch.from_numpy(resized_image_depth_np)
+
 
     return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, 
