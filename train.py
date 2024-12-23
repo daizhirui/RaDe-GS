@@ -144,7 +144,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             rgb_loss = torch.tensor([0],dtype=torch.float32,device="cuda")
 
 
-        rendered_depth_image: torch.Tensor = render_pkg["median_depth"]
+        rendered_depth_image: torch.Tensor = render_pkg["expected_depth"]
 
         if dataset.use_depth:
             gt_depth_image = viewpoint_cam.depth_image.cuda()
@@ -304,7 +304,7 @@ if __name__ == "__main__":
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[1] + list(range(0, 30_000, 1000)))
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[15000])
     parser.add_argument("--start_checkpoint", type=str, default = None)
