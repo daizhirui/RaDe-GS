@@ -1,0 +1,4 @@
+.git
+submodules/diff-gaussian-rasterization/build
+submodules/simple-knn/build
+*.egg-info

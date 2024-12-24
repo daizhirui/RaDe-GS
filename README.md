@@ -1,5 +1,14 @@
 # RaDe-GS: Rasterizing Depth in Gaussian Splatting
 
+### Running using Docker
+It should be possible to run the pre-built Docker image without building it. To do so:
+
+```bash
+./docker/run.bash <data_directory> <output_directory>
+```
+
+Afterwards, the `<output_directory>` should contain renders from the test poses.
+
 ### RaDe-GS: Rasterizing Depth in Gaussian Splatting
 Baowen Zhang, Chuan Fang, Rakesh Shrestha, Yixun Liang, Xiaoxiao Long, Ping Tan
 
