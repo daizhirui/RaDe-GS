@@ -21,8 +21,8 @@ if [ ! -d ${OUTPUT_DIR} ]; then
     mkdir -p ${OUTPUT_DIR}
 fi
 
-if [ ! -f ${DATA_DIR}/sddf_dataset.pt ]; then
-    echo "${DATA_DIR}/sddf_dataset.pt does not exist. Choose directory so that it exists" >&2
+if [ ! -f ${DATA_DIR}/sddf_dataset.train.pt ]; then
+    echo "${DATA_DIR}/sddf_dataset.train.pt does not exist. Choose directory so that it exists" >&2
     exit 2
 fi
 

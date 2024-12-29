@@ -3,7 +3,7 @@
 # GRAPHDECO research group, https://team.inria.fr/graphdeco
 # All rights reserved.
 #
-# This software is free for non-commercial, research and evaluation use 
+# This software is free for non-commercial, research and evaluation use
 # under the terms of the LICENSE.md file.
 #
 # For inquiries contact  george.drettakis@inria.fr
@@ -23,6 +23,7 @@ from gaussian_renderer import GaussianModel
 import cv2
 import numpy as np
 
+
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, kernel_size):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
@@ -41,40 +42,71 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         render_pkg = render(view, gaussians, pipeline, background, kernel_size=kernel_size)
         rgb_img = render_pkg["render"]
         depth_img = render_pkg["median_depth"].detach().cpu().numpy()[0, ...]
-        depth_img = (1000 * depth_img).astype(np.uint16)        
-        depth_img_jet = cv2.applyColorMap(cv2.normalize(depth_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC1), cv2.COLORMAP_JET)
+        depth_img = (1000 * depth_img).astype(np.uint16)
+        depth_img_jet = cv2.applyColorMap(
+            cv2.normalize(depth_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC1), cv2.COLORMAP_JET
+        )
 
         range_img = torch.linalg.norm(render_pkg["median_coord"], dim=0).detach().cpu().numpy()
         range_img = (1000 * range_img).astype(np.uint16)
-        range_img_jet = cv2.applyColorMap(cv2.normalize(range_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC1), cv2.COLORMAP_JET)
+        range_img_jet = cv2.applyColorMap(
+            cv2.normalize(range_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC1), cv2.COLORMAP_JET
+        )
 
         normal_img = render_pkg["normal"].detach().cpu().numpy()
 
         gt = view.original_image[0:3, :, :]
         # save range
-        cv2.imwrite(os.path.join(render_range_path, '{0:05d}'.format(idx) + ".png"), range_img)
-        cv2.imwrite(os.path.join(render_range_path, 'jetmap_{0:05d}'.format(idx) + ".png"), range_img_jet)
+        cv2.imwrite(os.path.join(render_range_path, "{0:05d}".format(idx) + ".png"), range_img)
+        cv2.imwrite(os.path.join(render_range_path, "jetmap_{0:05d}".format(idx) + ".png"), range_img_jet)
 
         # save depth
-        cv2.imwrite(os.path.join(render_depth_path, '{0:05d}'.format(idx) + ".png"), depth_img)
-        cv2.imwrite(os.path.join(render_depth_path, 'jetmap_{0:05d}'.format(idx) + ".png"), depth_img_jet)
+        cv2.imwrite(os.path.join(render_depth_path, "{0:05d}".format(idx) + ".png"), depth_img)
+        cv2.imwrite(os.path.join(render_depth_path, "jetmap_{0:05d}".format(idx) + ".png"), depth_img_jet)
 
-        torchvision.utils.save_image(rgb_img, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
-        torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
+        torchvision.utils.save_image(rgb_img, os.path.join(render_path, "{0:05d}".format(idx) + ".png"))
+        torchvision.utils.save_image(gt, os.path.join(gts_path, "{0:05d}".format(idx) + ".png"))
 
-def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool):
+
+def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams, skip_train: bool, skip_test: bool):
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree)
-        scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
+        scene = Scene(
+            dataset,
+            gaussians,
+            load_iteration=iteration,
+            shuffle=False,
+            skip_train=skip_train,
+            skip_test=skip_test,
+        )
 
-        bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
+        bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         if not skip_train:
-             render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, dataset.kernel_size)
+            render_set(
+                dataset.model_path,
+                "train",
+                scene.loaded_iter,
+                scene.getTrainCameras(),
+                gaussians,
+                pipeline,
+                background,
+                dataset.kernel_size,
+            )
 
         if not skip_test:
-             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, dataset.kernel_size)
+            render_set(
+                dataset.model_path,
+                "test",
+                scene.loaded_iter,
+                scene.getTestCameras(),
+                gaussians,
+                pipeline,
+                background,
+                dataset.kernel_size,
+            )
+
 
 if __name__ == "__main__":
     # Set up command line argument parser

@@ -7,11 +7,16 @@ RUN apt update && apt install -y \
     libegl1 \
     libgl1 \
     libgomp1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxrender1 \
+    libxext6 \
+    libglm-dev \
     && rm -rf /var/lib/apt/lists/**
 
 RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
-ENV TORCH_CUDA_ARCH_LIST "6.0 6.1 6.2 7.0 7.2 7.5 8.0 8.6 8.7 8.9 9.0"
+ENV TORCH_CUDA_ARCH_LIST="6.0 6.1 6.2 7.0 7.2 7.5 8.0 8.6 8.7 8.9 9.0"
 
 # TODO: need to copy
 COPY . /radegs
