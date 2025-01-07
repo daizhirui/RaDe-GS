@@ -42,30 +42,51 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         render_pkg = render(view, gaussians, pipeline, background, kernel_size=kernel_size)
         rgb_img = render_pkg["render"]
         depth_img = render_pkg["median_depth"].detach().cpu().numpy()[0, ...]
-        depth_img = (1000 * depth_img).astype(np.uint16)
+        # depth_img = (1000 * depth_img).astype(np.uint16)
         depth_img_jet = cv2.applyColorMap(
-            cv2.normalize(depth_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC1), cv2.COLORMAP_JET
+            cv2.normalize(
+                (1000 * depth_img).astype(np.uint16),
+                None,
+                0,
+                255,
+                cv2.NORM_MINMAX,
+                dtype=cv2.CV_8UC1,
+            ),
+            cv2.COLORMAP_JET,
         )
 
         range_img = torch.linalg.norm(render_pkg["median_coord"], dim=0).detach().cpu().numpy()
-        range_img = (1000 * range_img).astype(np.uint16)
+        # range_img = (1000 * range_img).astype(np.uint16)
         range_img_jet = cv2.applyColorMap(
-            cv2.normalize(range_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8UC1), cv2.COLORMAP_JET
+            cv2.normalize(
+                (1000 * range_img).astype(np.uint16),
+                None,
+                0,
+                255,
+                cv2.NORM_MINMAX,
+                dtype=cv2.CV_8UC1,
+            ),
+            cv2.COLORMAP_JET,
         )
 
         normal_img = render_pkg["normal"].detach().cpu().numpy()
+        normal_img = normal_img.transpose(1, 2, 0)
 
         gt = view.original_image[0:3, :, :]
+
         # save range
-        cv2.imwrite(os.path.join(render_range_path, "{0:05d}".format(idx) + ".png"), range_img)
-        cv2.imwrite(os.path.join(render_range_path, "jetmap_{0:05d}".format(idx) + ".png"), range_img_jet)
+        cv2.imwrite(os.path.join(render_range_path, "{0:06d}".format(idx) + ".tiff"), range_img)
+        cv2.imwrite(os.path.join(render_range_path, "jetmap_{0:06d}".format(idx) + ".png"), range_img_jet)
 
         # save depth
-        cv2.imwrite(os.path.join(render_depth_path, "{0:05d}".format(idx) + ".png"), depth_img)
-        cv2.imwrite(os.path.join(render_depth_path, "jetmap_{0:05d}".format(idx) + ".png"), depth_img_jet)
+        cv2.imwrite(os.path.join(render_depth_path, "{0:06d}".format(idx) + ".tiff"), depth_img)
+        cv2.imwrite(os.path.join(render_depth_path, "jetmap_{0:06d}".format(idx) + ".png"), depth_img_jet)
 
-        torchvision.utils.save_image(rgb_img, os.path.join(render_path, "{0:05d}".format(idx) + ".png"))
-        torchvision.utils.save_image(gt, os.path.join(gts_path, "{0:05d}".format(idx) + ".png"))
+        # save normal
+        cv2.imwrite(os.path.join(render_normal_path, "{0:06d}".format(idx) + ".tiff"), normal_img)
+
+        torchvision.utils.save_image(rgb_img, os.path.join(render_path, "{0:06d}".format(idx) + ".png"))
+        torchvision.utils.save_image(gt, os.path.join(gts_path, "{0:06d}".format(idx) + ".png"))
 
 
 def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams, skip_train: bool, skip_test: bool):
