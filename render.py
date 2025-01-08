@@ -8,38 +8,103 @@
 #
 # For inquiries contact  george.drettakis@inria.fr
 #
-
-import torch
-from scene import Scene
 import os
-from tqdm import tqdm
-from os import makedirs
-from gaussian_renderer import render
-import torchvision
-from utils.general_utils import safe_state
+import time
 from argparse import ArgumentParser
-from arguments import ModelParams, PipelineParams, get_combined_args
-from gaussian_renderer import GaussianModel
+from os import makedirs
+
 import cv2
 import numpy as np
+import torch
+from tqdm import tqdm
+
+from arguments import ModelParams, PipelineParams, get_combined_args
+from gaussian_renderer import GaussianModel
+from gaussian_renderer import render
+from scene import Scene
+from utils.general_utils import safe_state
 
 
-def render_set(model_path, name, iteration, views, gaussians, pipeline, background, kernel_size):
+class CpuTimer:
+
+    def __init__(self, message, repeats: int = 1, warmup: int = 0):
+        self.message = message
+        self.repeats = repeats
+        self.warmup = warmup
+        self.cnt = 0
+        self.t = 0
+        self.average_t = 0
+        self.total_t = 0
+
+    def __enter__(self):
+        self.start = time.perf_counter()
+        return self
+
+    def __exit__(self, *args):
+        self.end = time.perf_counter()
+        if self.cnt < self.warmup:
+            self.cnt += 1
+            return
+        self.cnt += 1
+        assert self.cnt <= self.repeats
+        self.t = self.end - self.start
+        n = self.repeats - self.warmup
+        self.average_t += self.t / n
+        self.total_t += self.t
+        tqdm.write(f"{self.message}: {self.t:.6f}(cur)/{self.average_t:.6f}(avg) seconds")
+
+
+class GpuTimer:
+
+    def __init__(self, message, repeats: int = 1, warmup: int = 0):
+        self.message = message
+        self.repeats = repeats
+        self.warmup = warmup
+        self.cnt = 0
+        self.t = 0
+        self.average_t = 0
+        self.total_t = 0
+
+    def __enter__(self):
+        self.start = torch.cuda.Event(enable_timing=True)
+        self.end = torch.cuda.Event(enable_timing=True)
+        self.start.record()
+        return self
+
+    def __exit__(self, *args):
+        self.end.record()
+        torch.cuda.synchronize()
+        self.t = self.start.elapsed_time(self.end) / 1e3
+        if self.cnt < self.warmup:
+            self.cnt += 1
+            return
+        self.cnt += 1
+        assert self.cnt <= self.repeats
+        n = self.repeats - self.warmup
+        self.average_t += self.t / n
+        self.total_t += self.t
+        tqdm.write(f"{self.message}: {self.t:.6f}(cur)/{self.average_t:.6f}(avg)/{self.total_t:.6f}(total) seconds")
+
+
+def render_set(model_path, name, iteration, views, gaussians, pipeline, background, kernel_size, dataset_path=None):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
-    render_depth_path = os.path.join(model_path, name, "ours_{}".format(iteration), "render_depth")
-    render_range_path = os.path.join(model_path, name, "ours_{}".format(iteration), "render_range")
-    render_normal_path = os.path.join(model_path, name, "ours_{}".format(iteration), "render_normal")
+    render_depth_path = os.path.join(model_path, name, "ours_{}".format(iteration), "depth")
+    render_range_path = os.path.join(model_path, name, "ours_{}".format(iteration), "range")
+    render_normal_path = os.path.join(model_path, name, "ours_{}".format(iteration), "normal")
 
     makedirs(render_path, exist_ok=True)
     makedirs(render_depth_path, exist_ok=True)
     makedirs(render_range_path, exist_ok=True)
     makedirs(render_normal_path, exist_ok=True)
-
     makedirs(gts_path, exist_ok=True)
 
-    for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
-        render_pkg = render(view, gaussians, pipeline, background, kernel_size=kernel_size)
+    timer = GpuTimer("Rendering", repeats=len(views), warmup=1)
+    errors = []
+    for idx, view in enumerate(tqdm(views, desc="Rendering progress", ncols=80)):
+        tqdm.write(f"{idx}")
+        with timer:
+            render_pkg = render(view, gaussians, pipeline, background, kernel_size=kernel_size)
         rgb_img = render_pkg["render"]
         depth_img = render_pkg["median_depth"].detach().cpu().numpy()[0, ...]
         # depth_img = (1000 * depth_img).astype(np.uint16)
@@ -73,6 +138,19 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         normal_img = normal_img.transpose(1, 2, 0)
 
         gt = view.original_image[0:3, :, :]
+        gt = gt.cpu().numpy().transpose(1, 2, 0)
+        rgb_img = rgb_img.cpu().numpy().transpose(1, 2, 0)
+
+        if dataset_path is not None:
+            gt_range_file = os.path.join(dataset_path, f"scans/test/range/{idx:06d}.tiff")
+            gt_range = cv2.imread(gt_range_file, cv2.IMREAD_UNCHANGED)
+            # ignore small values
+            mask = gt_range < 1.0e-3
+            gt_range[mask] = 0.0
+            range_img[mask] = 0.0
+            error = np.abs(gt_range - range_img).mean() * 100
+            tqdm.write(f"Range error: {error:.3f} cm")
+            errors.append(error)
 
         # save range
         cv2.imwrite(os.path.join(render_range_path, "{0:06d}".format(idx) + ".tiff"), range_img)
@@ -83,10 +161,30 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         cv2.imwrite(os.path.join(render_depth_path, "jetmap_{0:06d}".format(idx) + ".png"), depth_img_jet)
 
         # save normal
-        cv2.imwrite(os.path.join(render_normal_path, "{0:06d}".format(idx) + ".tiff"), normal_img)
+        cv2.imwrite(
+            os.path.join(render_normal_path, "{0:06d}".format(idx) + ".tiff"),  # tiff supports float32
+            normal_img[:, :, ::-1],  # BGR to RGB
+        )
 
-        torchvision.utils.save_image(rgb_img, os.path.join(render_path, "{0:06d}".format(idx) + ".png"))
-        torchvision.utils.save_image(gt, os.path.join(gts_path, "{0:06d}".format(idx) + ".png"))
+        cv2.imwrite(
+            os.path.join(render_path, "{0:06d}".format(idx) + ".png"),
+            np.clip(rgb_img[:, :, ::-1] * 255, 0, 255).astype(np.uint8),  # BGR to RGB
+        )
+        cv2.imwrite(
+            os.path.join(gts_path, "{0:06d}".format(idx) + ".png"),  # png supports uint8 or uint16
+            np.clip(gt[:, :, ::-1] * 255, 0, 255).astype(np.uint8),  # BGR to RGB
+        )
+
+    mean_error = np.mean(errors)
+    std_error = np.std(errors)
+    min_error = np.min(errors)
+    max_error = np.max(errors)
+    print(
+        f"Test complete:\n"
+        f"{len(views)} images rendered in total.\n"
+        f"timing(second): (itr){timer.average_t:.6f}/(total){timer.total_t:.6f}.\n"
+        f"error(cm): (mean){mean_error:.3f}/(std){std_error:.3f}/(min){min_error:.3f}/(max){max_error:.3f}."
+    )
 
 
 def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams, skip_train: bool, skip_test: bool):
@@ -114,6 +212,7 @@ def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams, 
                 pipeline,
                 background,
                 dataset.kernel_size,
+                dataset.source_path,
             )
 
         if not skip_test:
@@ -126,10 +225,11 @@ def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams, 
                 pipeline,
                 background,
                 dataset.kernel_size,
+                dataset.source_path,
             )
 
 
-if __name__ == "__main__":
+def main():
     # Set up command line argument parser
     parser = ArgumentParser(description="Testing script parameters")
     model = ModelParams(parser, sentinel=True)
@@ -145,3 +245,7 @@ if __name__ == "__main__":
     safe_state(args.quiet)
 
     render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test)
+
+
+if __name__ == "__main__":
+    main()

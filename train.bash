@@ -5,7 +5,7 @@ set -e
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 DATA_DIR=/home/daizhirui/Data/erl_neural_sddf/datasets
-OUTPUT_DIR=/home/daizhirui/results/erl_neural_sddf/baselines/RaDe-GS
+OUTPUT_DIR=/home/daizhirui/results/erl_neural_sddf/RaDe-GS
 COMMON_ARGS="--use_rgb --use_depth -r 2 --iterations 30000 --checkpoint_iterations 10000 15000 20000 30000"
 
 for dataset in $(ls $DATA_DIR); do
