@@ -86,6 +86,12 @@ class GpuTimer:
         tqdm.write(f"{self.message}: {self.t:.6f}(cur)/{self.average_t:.6f}(avg)/{self.total_t:.6f}(total) seconds")
 
 
+def compute_mae(pred, gt):
+    mask = gt > 1e-3
+    error = np.mean(np.abs(pred[mask] - gt[mask]))  # mean absolute error
+    return error
+
+
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, kernel_size, dataset_path=None):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
@@ -107,10 +113,9 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
             render_pkg = render(view, gaussians, pipeline, background, kernel_size=kernel_size)
         rgb_img = render_pkg["render"]
         depth_img = render_pkg["median_depth"].detach().cpu().numpy()[0, ...]
-        # depth_img = (1000 * depth_img).astype(np.uint16)
         depth_img_jet = cv2.applyColorMap(
             cv2.normalize(
-                (1000 * depth_img).astype(np.uint16),
+                depth_img,
                 None,
                 0,
                 255,
@@ -121,10 +126,9 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         )
 
         range_img = torch.linalg.norm(render_pkg["median_coord"], dim=0).detach().cpu().numpy()
-        # range_img = (1000 * range_img).astype(np.uint16)
         range_img_jet = cv2.applyColorMap(
             cv2.normalize(
-                (1000 * range_img).astype(np.uint16),
+                range_img,
                 None,
                 0,
                 255,
@@ -136,6 +140,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
         normal_img = render_pkg["normal"].detach().cpu().numpy()
         normal_img = normal_img.transpose(1, 2, 0)
+        normal_img = normal_img / np.linalg.norm(normal_img, axis=-1, keepdims=True)
 
         gt = view.original_image[0:3, :, :]
         gt = gt.cpu().numpy().transpose(1, 2, 0)
@@ -144,35 +149,35 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         if dataset_path is not None:
             gt_range_file = os.path.join(dataset_path, f"scans/test/range/{idx:06d}.tiff")
             gt_range = cv2.imread(gt_range_file, cv2.IMREAD_UNCHANGED)
-            # ignore small values
-            mask = gt_range < 1.0e-3
-            gt_range[mask] = 0.0
-            range_img[mask] = 0.0
-            error = np.abs(gt_range - range_img).mean() * 100
+            error = compute_mae(range_img, gt_range) * 100
             tqdm.write(f"Range error: {error:.3f} cm")
             errors.append(error)
 
         # save range
-        cv2.imwrite(os.path.join(render_range_path, "{0:06d}".format(idx) + ".tiff"), range_img)
-        cv2.imwrite(os.path.join(render_range_path, "jetmap_{0:06d}".format(idx) + ".png"), range_img_jet)
+        cv2.imwrite(os.path.join(render_range_path, "{0:06d}".format(idx) + ".tiff"), range_img.astype(np.float32))
+        cv2.imwrite(os.path.join(render_range_path, "colored_{0:06d}".format(idx) + ".png"), range_img_jet)
 
         # save depth
-        cv2.imwrite(os.path.join(render_depth_path, "{0:06d}".format(idx) + ".tiff"), depth_img)
-        cv2.imwrite(os.path.join(render_depth_path, "jetmap_{0:06d}".format(idx) + ".png"), depth_img_jet)
+        cv2.imwrite(os.path.join(render_depth_path, "{0:06d}".format(idx) + ".tiff"), depth_img.astype(np.float32))
+        cv2.imwrite(os.path.join(render_depth_path, "colored_{0:06d}".format(idx) + ".png"), depth_img_jet)
 
         # save normal
         cv2.imwrite(
             os.path.join(render_normal_path, "{0:06d}".format(idx) + ".tiff"),  # tiff supports float32
-            normal_img[:, :, ::-1],  # BGR to RGB
+            normal_img[:, :, ::-1].astype(np.float32),  # RGB to BGR
+        )
+        cv2.imwrite(
+            os.path.join(render_normal_path, "colored_{0:06d}".format(idx) + ".png"),
+            ((normal_img + 1) / 2.0 * 255).astype(np.uint8)[..., ::-1],  # RGB to BGR
         )
 
         cv2.imwrite(
             os.path.join(render_path, "{0:06d}".format(idx) + ".png"),
-            np.clip(rgb_img[:, :, ::-1] * 255, 0, 255).astype(np.uint8),  # BGR to RGB
+            np.clip(rgb_img[:, :, ::-1] * 255, 0, 255).astype(np.uint8),  # RGB to BGR
         )
         cv2.imwrite(
             os.path.join(gts_path, "{0:06d}".format(idx) + ".png"),  # png supports uint8 or uint16
-            np.clip(gt[:, :, ::-1] * 255, 0, 255).astype(np.uint8),  # BGR to RGB
+            np.clip(gt[:, :, ::-1] * 255, 0, 255).astype(np.uint8),  # RGB to BGR
         )
 
     mean_error = np.mean(errors)

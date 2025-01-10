@@ -13,7 +13,7 @@ for dataset in $(ls $DATA_DIR); do
             continue
     fi
     echo $dataset
-
+    mkdir -p $OUTPUT_DIR/$dataset/test
     python3 $SCRIPT_DIR/render.py -s $DATA_DIR/$dataset \
         -m $OUTPUT_DIR/$dataset \
         $COMMON_ARGS | tee $OUTPUT_DIR/$dataset/test/log.txt
