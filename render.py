@@ -95,11 +95,12 @@ def compute_mae(pred, gt):
 
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, kernel_size, dataset_path=None):
-    render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
-    gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
-    render_depth_path = os.path.join(model_path, name, "ours_{}".format(iteration), "depth")
-    render_range_path = os.path.join(model_path, name, "ours_{}".format(iteration), "range")
-    render_normal_path = os.path.join(model_path, name, "ours_{}".format(iteration), "normal")
+    output_dir = os.path.join(model_path, name, "ours_{}".format(iteration))
+    render_path = os.path.join(output_dir, "renders")
+    gts_path = os.path.join(output_dir, "gt")
+    render_depth_path = os.path.join(output_dir, "depth")
+    render_range_path = os.path.join(output_dir, "range")
+    render_normal_path = os.path.join(output_dir, "normal")
 
     makedirs(render_path, exist_ok=True)
     makedirs(render_depth_path, exist_ok=True)
@@ -208,6 +209,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     )
     for i, error in enumerate(errors):
         print(f"error {i}: {error:.3f} cm.")
+    np.save(os.path.join(output_dir, "errors.npy"), errors)
 
 
 def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams, skip_train: bool, skip_test: bool):
