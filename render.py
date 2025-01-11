@@ -34,6 +34,7 @@ class CpuTimer:
         self.cnt = 0
         self.t = 0
         self.average_t = 0
+        self._total_t = 0
         self.total_t = 0
 
     def __enter__(self):
@@ -48,10 +49,10 @@ class CpuTimer:
         self.cnt += 1
         assert self.cnt <= self.repeats
         self.t = self.end - self.start
-        n = self.repeats - self.warmup
-        self.average_t += self.t / n
-        self.total_t += self.t
-        tqdm.write(f"{self.message}: {self.t:.6f}(cur)/{self.average_t:.6f}(avg) seconds")
+        self._total_t += self.t
+        self.average_t = self._total_t / (self.cnt - self.warmup)
+        self.total_t = self.average_t * self.cnt
+        tqdm.write(f"{self.message}: {self.t:.6f}(cur)/{self.average_t:.6f}(avg)/{self.total_t:.6f}(total) seconds")
 
 
 class GpuTimer:
@@ -63,6 +64,7 @@ class GpuTimer:
         self.cnt = 0
         self.t = 0
         self.average_t = 0
+        self._total_t = 0
         self.total_t = 0
 
     def __enter__(self):
@@ -80,9 +82,9 @@ class GpuTimer:
             return
         self.cnt += 1
         assert self.cnt <= self.repeats
-        n = self.repeats - self.warmup
-        self.average_t += self.t / n
-        self.total_t += self.t
+        self._total_t += self.t
+        self.average_t = self._total_t / (self.cnt - self.warmup)
+        self.total_t = self.average_t * self.cnt
         tqdm.write(f"{self.message}: {self.t:.6f}(cur)/{self.average_t:.6f}(avg)/{self.total_t:.6f}(total) seconds")
 
 
@@ -111,6 +113,8 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         tqdm.write(f"{idx}")
         with timer:
             render_pkg = render(view, gaussians, pipeline, background, kernel_size=kernel_size)
+            range_img = torch.linalg.norm(render_pkg["median_coord"], dim=0).detach().cpu().numpy()
+
         rgb_img = render_pkg["render"]
         depth_img = render_pkg["median_depth"].detach().cpu().numpy()[0, ...]
         depth_img_jet = cv2.applyColorMap(
@@ -125,7 +129,6 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
             cv2.COLORMAP_JET,
         )
 
-        range_img = torch.linalg.norm(render_pkg["median_coord"], dim=0).detach().cpu().numpy()
         range_img_jet = cv2.applyColorMap(
             cv2.normalize(
                 range_img,
@@ -168,7 +171,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         )
         cv2.imwrite(
             os.path.join(render_normal_path, "colored_{0:06d}".format(idx) + ".png"),
-            ((normal_img + 1) / 2.0 * 255).astype(np.uint8)[..., ::-1],  # RGB to BGR
+            ((normal_img + 1) * 0.5 * 255).astype(np.uint8)[..., ::-1],  # RGB to BGR
         )
 
         cv2.imwrite(
@@ -184,12 +187,27 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     std_error = np.std(errors)
     min_error = np.min(errors)
     max_error = np.max(errors)
+    num_params = sum(
+        p.numel()
+        for p in (
+            gaussians._xyz,
+            gaussians._features_dc,
+            gaussians._features_rest,
+            gaussians._scaling,
+            gaussians._rotation,
+            gaussians._opacity,
+            gaussians.max_radii2D,
+        )
+    )
     print(
         f"Test complete:\n"
         f"{len(views)} images rendered in total.\n"
+        f"model size: {num_params / 1e6:.3f}M.\n"
         f"timing(second): (itr){timer.average_t:.6f}/(total){timer.total_t:.6f}.\n"
         f"error(cm): (mean){mean_error:.3f}/(std){std_error:.3f}/(min){min_error:.3f}/(max){max_error:.3f}."
     )
+    for i, error in enumerate(errors):
+        print(f"error {i}: {error:.3f} cm.")
 
 
 def render_sets(dataset: ModelParams, iteration: int, pipeline: PipelineParams, skip_train: bool, skip_test: bool):
