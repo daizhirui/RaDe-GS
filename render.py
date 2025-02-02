@@ -89,7 +89,7 @@ class GpuTimer:
 
 
 def compute_mae(pred, gt):
-    mask = gt > 1e-3
+    mask = (gt > 1e-3) & np.isfinite(gt)
     error = np.mean(np.abs(pred[mask] - gt[mask]))  # mean absolute error
     return error
 
@@ -145,6 +145,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         normal_img = render_pkg["normal"].detach().cpu().numpy()
         normal_img = normal_img.transpose(1, 2, 0)
         normal_img = normal_img / np.linalg.norm(normal_img, axis=-1, keepdims=True)
+        normal_img[~np.isfinite(normal_img)] = 0
 
         gt = view.original_image[0:3, :, :]
         gt = gt.cpu().numpy().transpose(1, 2, 0)

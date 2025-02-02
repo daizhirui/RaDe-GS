@@ -32,6 +32,7 @@ class Scene:
         resolution_scales=None,
         skip_train=False,
         skip_test=False,
+        use_rgb=True,
     ):
         if resolution_scales is None:
             resolution_scales = [1.0]
@@ -100,6 +101,9 @@ class Scene:
                 os.path.join(self.model_path, "point_cloud", "iteration_" + str(self.loaded_iter), "point_cloud.ply")
             )
         else:
+            if not use_rgb:
+                scene_info.point_cloud.colors[...] = 0.5
+                print("Using gray colors for point cloud when use_rgb=False.")
             self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
 
     def save(self, iteration):

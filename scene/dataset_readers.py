@@ -439,7 +439,6 @@ def readSDDFCamInfo(path, suffix="train"):
 def readSDDFDatasetInfo(path):
 
     ply_path = os.path.join(path, "points3d.ply")
-    # TODO: combine depth image pointclouds?
     if ply_path is None or not os.path.exists(ply_path):
         num_pts = 100_000
         print(f"Generating random point cloud ({num_pts})...")
@@ -450,8 +449,8 @@ def readSDDFDatasetInfo(path):
         pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
 
         storePly(ply_path, xyz, SH2RGB(shs) * 255)
-
-    pcd = fetchPly(ply_path)
+    else:
+        pcd = fetchPly(ply_path)
 
     cam_base_path = os.path.join(path, "scans")
 
