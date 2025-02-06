@@ -25,6 +25,29 @@ from scene import Scene
 from utils.general_utils import safe_state
 
 
+def save_distances(filename: str, distances: np.ndarray, scale=1000.0) -> bool:
+    distances = np.round(distances.astype(np.float64) * scale).astype(np.uint16)
+    return cv2.imwrite(filename, distances)
+
+
+def load_distances(filename: str, scale=1000.0) -> np.ndarray[np.float32]:
+    distances = cv2.imread(filename, cv2.IMREAD_UNCHANGED)
+    return distances.astype(np.float32) / scale
+
+
+def save_normals(filename: str, normals: np.ndarray, scale=65535.0) -> bool:
+    # [-1, 1] to [0, 1], then to [0, 65535]
+    normals = (normals.astype(np.float64) + 1) * 0.5 * scale
+    normals = normals.astype(np.uint16)
+    return cv2.imwrite(filename, normals[..., ::-1])
+
+
+def load_normals(filename: str, scale=65535.0) -> np.ndarray[np.float32]:
+    normals = cv2.imread(filename, cv2.IMREAD_UNCHANGED)
+    normals = normals.astype(np.float32) / scale * 2 - 1
+    return normals[..., ::-1]
+
+
 class CpuTimer:
 
     def __init__(self, message, repeats: int = 1, warmup: int = 0):
@@ -152,25 +175,21 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         rgb_img = rgb_img.cpu().numpy().transpose(1, 2, 0)
 
         if dataset_path is not None:
-            gt_range_file = os.path.join(dataset_path, f"scans/test/range/{idx:06d}.tiff")
-            gt_range = cv2.imread(gt_range_file, cv2.IMREAD_UNCHANGED)
+            gt_range = load_distances(os.path.join(dataset_path, f"scans/test/range/{idx:06d}.png"))
             error = compute_mae(range_img, gt_range) * 100
             tqdm.write(f"Range error: {error:.3f} cm")
             errors.append(error)
 
         # save range
-        cv2.imwrite(os.path.join(render_range_path, "{0:06d}".format(idx) + ".tiff"), range_img.astype(np.float32))
+        save_distances(os.path.join(render_range_path, f"{idx:06d}.png"), range_img)
         cv2.imwrite(os.path.join(render_range_path, "colored_{0:06d}".format(idx) + ".png"), range_img_jet)
 
         # save depth
-        cv2.imwrite(os.path.join(render_depth_path, "{0:06d}".format(idx) + ".tiff"), depth_img.astype(np.float32))
+        save_distances(os.path.join(render_depth_path, f"{idx:06d}.png"), depth_img)
         cv2.imwrite(os.path.join(render_depth_path, "colored_{0:06d}".format(idx) + ".png"), depth_img_jet)
 
         # save normal
-        cv2.imwrite(
-            os.path.join(render_normal_path, "{0:06d}".format(idx) + ".tiff"),  # tiff supports float32
-            normal_img[:, :, ::-1].astype(np.float32),  # RGB to BGR
-        )
+        save_normals(os.path.join(render_normal_path, f"{idx:06d}.png"), normal_img)
         cv2.imwrite(
             os.path.join(render_normal_path, "colored_{0:06d}".format(idx) + ".png"),
             ((normal_img + 1) * 0.5 * 255).astype(np.uint8)[..., ::-1],  # RGB to BGR

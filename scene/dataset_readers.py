@@ -403,14 +403,17 @@ def readSDDFCamInfo(path, suffix="train"):
 
     oTc = np.array([[0, -1, 0], [0, 0, -1], [1, 0, 0]])
 
+    def load_distances(filename: str, scale=1000.0) -> np.ndarray[np.float32]:
+        distances = cv2.imread(filename, cv2.IMREAD_UNCHANGED)
+        return distances.astype(np.float32) / scale
+
     for idx, (R_wTc, T_wTc) in enumerate(poses):
         image_name = f"{idx:06}"
         image_file_path = os.path.join(rgb_image_path_base, image_name + ".png")
         image = Image.open(image_file_path)
 
-        depth_image_file_path = os.path.join(depth_image_path_base, image_name + ".tiff")
-
-        depth_image = cv2.imread(depth_image_file_path, cv2.IMREAD_UNCHANGED)
+        depth_image_file_path = os.path.join(depth_image_path_base, image_name + ".png")
+        depth_image = load_distances(depth_image_file_path)
 
         R_oTw = oTc @ R_wTc.T  # try R_oTw
         T_oTw = oTc @ (-R_wTc.T @ T_wTc)  # try T_oTw
